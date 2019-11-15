@@ -99,8 +99,8 @@ static void send_producer_record(struct rdma_cm_id *id)
         strcat(str, "/");
         strcat(str, h->value);
         str[strlen(str)] = '\0';
-        ctx->buffer = str;
-        printf("sending %s\n via RDMA", ctx->buffer);
+        strcpy(ctx->buffer, str);
+        printf("sending %s via RDMA\n", ctx->buffer);
         rdma_send(id, strlen(str)+1);
     } else {
         // busy loop for now - ideally we would need to wait till a new entry is added
