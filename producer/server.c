@@ -90,6 +90,12 @@ static void on_completion(struct ibv_wc *wc)
   struct conn_context *ctx = (struct conn_context *)id->context;
 
   if (wc->opcode == IBV_WC_RECV_RDMA_WITH_IMM) {
+    uint32_t size = ntohl(wc->imm_data);
+    if(size == 0) {
+        ctx->msg->id = MSG_DONE;
+        send_message(id);
+        return;
+    }
     printf("Received data %s\n", ctx->buffer);
     post_receive(id);
     ctx->msg->id = MSG_READY;

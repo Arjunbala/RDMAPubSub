@@ -7,7 +7,8 @@ const size_t BUFFER_SIZE = 10 * 1024 * 1024;
 enum message_id
 {
   MSG_INVALID = 0,
-  MSG_READY
+  MSG_READY,
+  MSG_DONE
 };
 
 struct message

@@ -141,8 +141,10 @@ void * poll_cq(void *ctx)
     while (ibv_poll_cq(cq, 1, &wc)) {
       if (wc.status == IBV_WC_SUCCESS)
         s_on_completion_cb(&wc);
-      else
+      else {
+        printf("%d\n", wc.status);
         rc_die("poll_cq: status is not IBV_WC_SUCCESS");
+      }
     }
   }
 
