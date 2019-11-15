@@ -47,17 +47,18 @@ struct ProducerMessage* createNode(char *key, char *value)
 /**
  * Add the given node to end of linked list pointed to by head
  */
-void insertAtEnd(struct ProducerMessage *head, struct ProducerMessage *node)
+struct ProducerMessage* insertAtEnd(struct ProducerMessage *head, struct ProducerMessage *node)
 {
     struct ProducerMessage *h = head;
     if(h == NULL) {
-        h = node;
+        head = node;
     } else {
         while(h->next != NULL) {
             h = h->next;
         }
         h->next = node;
     }
+    return head;
 }
 
 static void rdma_send(struct rdma_cm_id *id, uint32_t len)
@@ -99,10 +100,11 @@ static void send_producer_record(struct rdma_cm_id *id)
         strcat(str, h->value);
         str[strlen(str)] = '\0';
         ctx->buffer = str;
-        printf("%s\n", ctx->buffer);
+        printf("sending %s\n via RDMA", ctx->buffer);
         rdma_send(id, strlen(str)+1);
     } else {
         // busy loop for now - ideally we would need to wait till a new entry is added
+        printf("Busy looping\n");
         while(1);
     }
     // Get ready to send next message
@@ -151,6 +153,7 @@ static void on_completion(struct ibv_wc *wc)
             ctx->peer_rkey = ctx->msg->data.mr.rkey;
             printf("received ready, sending next producer record\n");
             send_producer_record(id);
+            post_receive(id);
         }
     }
 }
@@ -167,8 +170,8 @@ int main(int argc, char **argv)
     // Create some sample messages
     // TODO: Need an async mechanism to fill this queue
     struct ProducerMessage *head = NULL;
-    insertAtEnd(head, createNode("1","Arjun"));
-    insertAtEnd(head, createNode("2", "Danish"));
+    head = insertAtEnd(head, createNode("1","Arjun"));
+    head = insertAtEnd(head, createNode("2", "Danish"));
 
     ctx.head = head;
 
