@@ -141,7 +141,6 @@ static void send_producer_record(struct rdma_cm_id *id)
         }
         printf("Got a producer record now\n");
     }
-    pthread_mutex_unlock(&producer_mutex);
     // Serialize the msg as key/value
     // TODO: Use a better serialization logic
     char *str = (char*) malloc(strlen(h->key) + strlen(h->value) + 2);
@@ -150,6 +149,8 @@ static void send_producer_record(struct rdma_cm_id *id)
     strcat(str, h->value);
     str[strlen(str)] = '\0';
     strcpy(ctx->buffer, str);
+    producer_records[ctx->index] = NULL;
+    pthread_mutex_unlock(&producer_mutex);
     printf("sending %s via RDMA\n", ctx->buffer);
     rdma_send(id, strlen(str)+1);
     
