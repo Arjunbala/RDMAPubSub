@@ -21,6 +21,9 @@ struct client_context
     struct message *msg;
     struct ibv_mr *msg_mr;
 
+    uint64_t peer_addr;
+    uint32_t peer_rkey;
+
     struct ProducerMessage *head;
 };
 
@@ -68,8 +71,11 @@ static void rdma_send(struct rdma_cm_id *id, uint32_t len)
     wr.wr_id = (uintptr_t)id;
     wr.sg_list = &sge;
     wr.num_sge = 1;
-    wr.opcode = IBV_WR_SEND;
+    wr.opcode = IBV_WR_RDMA_WRITE_WITH_IMM;
     wr.send_flags = IBV_SEND_SIGNALED;
+    wr.imm_data = htonl(len);
+    wr.wr.rdma.remote_addr = ctx->peer_addr;
+    wr.wr.rdma.rkey = ctx->peer_rkey;
 
     sge.addr = (uintptr_t)ctx->buffer;
     sge.length = len;
@@ -93,6 +99,7 @@ static void send_producer_record(struct rdma_cm_id *id)
         strcat(str, h->value);
         str[strlen(str)] = '\0';
         ctx->buffer = str;
+        printf("%s\n", ctx->buffer);
         rdma_send(id, strlen(str)+1);
     } else {
         // busy loop for now - ideally we would need to wait till a new entry is added
@@ -140,6 +147,8 @@ static void on_completion(struct ibv_wc *wc)
     
     if (wc->opcode & IBV_WC_RECV) {
         if (ctx->msg->id == MSG_READY) {
+            ctx->peer_addr = ctx->msg->data.mr.addr;
+            ctx->peer_rkey = ctx->msg->data.mr.rkey;
             printf("received ready, sending next producer record\n");
             send_producer_record(id);
         }
