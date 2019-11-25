@@ -23,7 +23,7 @@ struct client_context
     uint64_t peer_addr;
     uint32_t peer_rkey;
 
-    uint64_t size;
+    int size;
     enum {
 	READ_POLLING,
 	READ_READY
@@ -82,7 +82,7 @@ static void on_pre_conn(struct rdma_cm_id *id)
     struct client_context *ctx = (struct client_context *) id->context;
 
     posix_memalign((void **)&ctx->buffer, sysconf(_SC_PAGESIZE), BUFFER_SIZE);
-    TEST_Z(ctx->buffer_mr = ibv_reg_mr(rc_get_pd(), ctx->buffer, BUFFER_SIZE, 0));
+    TEST_Z(ctx->buffer_mr = ibv_reg_mr(rc_get_pd(), ctx->buffer, BUFFER_SIZE, IBV_ACCESS_LOCAL_WRITE));
 
     posix_memalign((void **)&ctx->msg, sysconf(_SC_PAGESIZE), sizeof(*ctx->msg));
     TEST_Z(ctx->msg_mr = ibv_reg_mr(rc_get_pd(), ctx->msg, sizeof(*ctx->msg), IBV_ACCESS_LOCAL_WRITE));
@@ -101,15 +101,19 @@ struct ProducerMessage* consumeRecord() {
 
 static void issue_one_sided_read(struct rdma_cm_id *id) {
     struct client_context *ctx = (struct client_context *)id->context;
+    printf("Started issuing...\n");
     // Check if in polling state
     if (ctx->read_status == READ_POLLING) {
         // Check if buffer has valid length
+        printf("ATOI:%d\n", atoi(ctx->buffer));
         if (atoi(ctx->buffer) > 0) {
             // Transition to READ_READY, set the size
 	    ctx->read_status = READ_READY;
 	    ctx->size = atoi(ctx->buffer);
+            printf("The size to be read has been set as %d\n", ctx->size);
 	    // Update remote addr to read from
             ctx->peer_addr += VAL_LENGTH; // TODO: Wrap around
+            printf("Forwarding peer address by %zu\n", VAL_LENGTH);
 	    // Issue one sided operation to read the data
             struct ibv_send_wr wr, *bad_wr = NULL;
     	    struct ibv_sge sge;
@@ -121,12 +125,13 @@ static void issue_one_sided_read(struct rdma_cm_id *id) {
     	    wr.send_flags = IBV_SEND_SIGNALED;
     	    wr.wr.rdma.remote_addr = (uintptr_t)ctx->peer_addr;
     	    wr.wr.rdma.rkey = ctx->peer_rkey;
-
+	    printf("Did wr things...\n");
             sge.addr = (uintptr_t)ctx->buffer;
     	    sge.length = ctx->size;
     	    sge.lkey = ctx->buffer_mr->lkey;
 
     	    TEST_NZ(ibv_post_send(id->qp, &wr, &bad_wr));	    
+	    printf("Posted send at 1...\n");
         } else {
             // Issue one sided operation, polling logic
             struct ibv_send_wr wr, *bad_wr = NULL;
@@ -139,19 +144,24 @@ static void issue_one_sided_read(struct rdma_cm_id *id) {
     	    wr.send_flags = IBV_SEND_SIGNALED;
     	    wr.wr.rdma.remote_addr = (uintptr_t)ctx->peer_addr;
     	    wr.wr.rdma.rkey = ctx->peer_rkey;
+	    printf("Did wr things at 2...\n");
 
             sge.addr = (uintptr_t)ctx->buffer;
     	    sge.length = ctx->size; // Check type
     	    sge.lkey = ctx->buffer_mr->lkey;
 
     	    TEST_NZ(ibv_post_send(id->qp, &wr, &bad_wr));
+	    printf("Posted send at 2...\n");
 	}
     } else {
 	// Deserialize the buffer into producer record
         char* separator;
         separator = strstr(ctx->buffer, "/");
+	printf("Separator is %s\n", separator);
         char* key = (char*)malloc(sizeof(char) *  (separator - ctx->buffer + 1));
+        printf("Key allocated of length: %zu\n", (separator - ctx->buffer + 1));
         strncpy(key, ctx->buffer, (separator - ctx->buffer));
+        printf("Key: %s\n", key);
         producer_record = createNode(key, separator + 1);        
 	pthread_cond_signal(&polling_cond_variable);
         pthread_mutex_lock(&polling_mutex);
@@ -191,11 +201,9 @@ static void on_completion(struct ibv_wc *wc)
         if (ctx->msg->id == MSG_READY) {
             ctx->peer_addr = ctx->msg->data.mr.addr;
             ctx->peer_rkey = ctx->msg->data.mr.rkey;
+	    printf("Assigned...\n");
 	    // Start one sided polling
-            // printf("received ready, sending next producer record\n");
-            // send_producer_record(id);
             issue_one_sided_read(id);
-            // post_receive(id);
         } // put error here
     } else {
         // do one sided polling
