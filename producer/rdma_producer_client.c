@@ -203,7 +203,7 @@ void *run_client_loop(void *s)
         on_completion,
         NULL); // on disconnect
 
-    rc_client_loop(server, DEFAULT_PORT, &ctx);
+    rc_client_loop(server, DEFAULT_PORT, &ctx, PRODUCER_ROLE);
     return 0;
 }
 

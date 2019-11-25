@@ -16,6 +16,7 @@ static pre_conn_cb_fn s_on_pre_conn_cb = NULL;
 static connect_cb_fn s_on_connect_cb = NULL;
 static completion_cb_fn s_on_completion_cb = NULL;
 static disconnect_cb_fn s_on_disconnect_cb = NULL;
+static char *client_role = NULL;
 
 static void build_context(struct ibv_context *verbs);
 static void build_qp_attr(struct ibv_qp_init_attr *qp_attr);
@@ -56,7 +57,7 @@ void build_context(struct ibv_context *verbs)
 void build_params(struct rdma_conn_param *params)
 {
   memset(params, 0, sizeof(*params));
-
+  printf("In build params\n");
   params->initiator_depth = params->responder_resources = 1;
   params->rnr_retry_count = 7; /* infinite retry */
 }
@@ -87,16 +88,17 @@ void event_loop(struct rdma_event_channel *ec, int exit_on_disconnect)
 
     memcpy(&event_copy, event, sizeof(*event));
     rdma_ack_cm_event(event);
-
     if (event_copy.event == RDMA_CM_EVENT_ADDR_RESOLVED) {
       build_connection(event_copy.id);
-
+      
       if (s_on_pre_conn_cb)
         s_on_pre_conn_cb(event_copy.id);
 
       TEST_NZ(rdma_resolve_route(event_copy.id, TIMEOUT_IN_MS));
 
     } else if (event_copy.event == RDMA_CM_EVENT_ROUTE_RESOLVED) {
+      cm_params.private_data = (void*) client_role;
+      cm_params.private_data_len = strlen(client_role);
       TEST_NZ(rdma_connect(event_copy.id, &cm_params));
 
     } else if (event_copy.event == RDMA_CM_EVENT_CONNECT_REQUEST) {
@@ -126,6 +128,11 @@ void event_loop(struct rdma_event_channel *ec, int exit_on_disconnect)
       rc_die("unknown event\n");
     }
   }
+}
+
+char* getRole()
+{
+    return client_role;
 }
 
 void * poll_cq(void *ctx)
@@ -159,12 +166,14 @@ void rc_init(pre_conn_cb_fn pc, connect_cb_fn conn, completion_cb_fn comp, disco
   s_on_disconnect_cb = disc;
 }
 
-void rc_client_loop(const char *host, const char *port, void *context)
+void rc_client_loop(const char *host, const char *port, void *context, const char *role)
 {
   struct addrinfo *addr;
   struct rdma_cm_id *conn = NULL;
   struct rdma_event_channel *ec = NULL;
   struct rdma_conn_param cm_params;
+
+  strcpy(client_role, role);
 
   TEST_NZ(getaddrinfo(host, port, NULL, &addr));
 

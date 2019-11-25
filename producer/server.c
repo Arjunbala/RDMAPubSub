@@ -54,6 +54,7 @@ static void on_pre_conn(struct rdma_cm_id *id)
 
   id->context = ctx;
 
+  printf("ROLE: %s\n", getRole());
   posix_memalign((void **)&ctx->buffer, sysconf(_SC_PAGESIZE), BUFFER_SIZE);
   TEST_Z(ctx->buffer_mr = ibv_reg_mr(rc_get_pd(), ctx->buffer, BUFFER_SIZE, IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_WRITE));
 
