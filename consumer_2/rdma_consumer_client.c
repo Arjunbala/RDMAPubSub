@@ -7,40 +7,39 @@
 #include "messages.h"
 #include "rdma_consumer.h"
 
+#define PRODUCER_RECORD_BACKLOG 1000
 #define VAL_LENGTH sizeof(int)
 
-struct client_context
-{
-    // For sending producer records
+struct client_context {
+    // For receiving consumer records
     char *buffer;
     struct ibv_mr *buffer_mr;
-
     // For receiving acks
     struct message *msg;
     struct ibv_mr *msg_mr;
-
     // Hold remote addr and keys
     uint64_t peer_addr;
     uint32_t peer_rkey;
-
+    // Length of buffer to read from server
     int size;
+    // State of the client
     enum {
 	READ_POLLING,
 	READ_READY
     } read_status;
 };
 
-
-
-#define PRODUCER_RECORD_BACKLOG 1000
-
+// Record to be returned to the client
 struct ProducerMessage *producer_record = NULL;
-
 int shouldDisconnect = 0;
+
+// Mutexes and conditional variables to synchronize polling and 
+// consumeRecord client calls
 pthread_cond_t consumer_cond_variable = PTHREAD_COND_INITIALIZER;
+pthread_mutex_t polling_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t polling_cond_variable = PTHREAD_COND_INITIALIZER;
 pthread_mutex_t consumer_mutex = PTHREAD_MUTEX_INITIALIZER;
-pthread_mutex_t polling_mutex = PTHREAD_MUTEX_INITIALIZER;
+
 /**
  * Create a ProducerMessage node with the given key and value
  * Note: Creates deep copies of both key and value
@@ -154,6 +153,7 @@ static void issue_one_sided_read(struct rdma_cm_id *id) {
 	    printf("Posted send at 2...\n");
 	}
     } else {
+	printf("Server wrote into the buffer: %s\n", ctx->buffer);
 	// Deserialize the buffer into producer record
         char* separator;
         separator = strstr(ctx->buffer, "/");
@@ -169,7 +169,7 @@ static void issue_one_sided_read(struct rdma_cm_id *id) {
 	pthread_mutex_unlock(&polling_mutex);
 	// Transition state to READ_POLLING, change peer_addr and size
 	ctx->read_status = READ_POLLING;
-	ctx->peer_addr += ctx->size;
+	ctx->peer_addr += ctx->size - 1;
 	ctx->size = VAL_LENGTH;
 	// Issue one sided operation to read the length
 	struct ibv_send_wr wr, *bad_wr = NULL;
