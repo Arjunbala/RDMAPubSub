@@ -4,14 +4,14 @@ CFLAGS  := -Wall -Werror -g
 LD      := gcc
 LDLIBS  := ${LDLIBS} -lrdmacm -libverbs -lpthread
 
-APPS    := rdma-client rdma-server
+APPS    := client server
 
 all: ${APPS}
 
-rdma-client: common.o client.o
+client: common.o rdma_consumer_client.o client.o
 	${LD} -o $@ $^ ${LDLIBS}
 
-rdma-server: common.o server.o
+server: common.o server.o
 	${LD} -o $@ $^ ${LDLIBS}
 
 clean:

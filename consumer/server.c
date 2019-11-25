@@ -1,104 +1,160 @@
+#include <fcntl.h>
+#include <sys/stat.h>
+
 #include "common.h"
+#include "messages.h"
 
-static int on_connect_request(struct rdma_cm_id *id);
-static int on_connection(struct rdma_cm_id *id);
-static int on_disconnect(struct rdma_cm_id *id);
-static int on_event(struct rdma_cm_event *event);
-static void usage(const char *argv0);
+struct conn_context {
+    // Server buffer and corresponding memory region
+    char *buffer;
+    struct ibv_mr *buffer_mr;
+    // Memory used to share server key and corresponding region
+    struct message *msg;
+    struct ibv_mr *msg_mr;
+};
 
+// Number of client connections to the server
+static int num_clients = 0;
+// The buffer shared remotely by the server
+static char* buffer = NULL;
+// Memory region of the buffer shared remotely by the server
+static struct ibv_mr *buffer_mr;
+
+static void send_message(struct rdma_cm_id *id) {
+    struct conn_context *ctx = (struct conn_context *)id->context;
+  
+    struct ibv_send_wr wr, *bad_wr = NULL;
+    struct ibv_sge sge;
+  
+    memset(&wr, 0, sizeof(wr));
+  
+    wr.wr_id = (uintptr_t)id;
+    wr.opcode = IBV_WR_SEND;
+    wr.sg_list = &sge;
+    wr.num_sge = 1;
+    wr.send_flags = IBV_SEND_SIGNALED;
+  
+    sge.addr = (uintptr_t)ctx->msg;
+    sge.length = sizeof(*ctx->msg);
+    sge.lkey = ctx->msg_mr->lkey;
+  
+    TEST_NZ(ibv_post_send(id->qp, &wr, &bad_wr));
+}
+
+static void post_receive(struct rdma_cm_id *id) {
+    struct ibv_recv_wr wr, *bad_wr = NULL;
+  
+    memset(&wr, 0, sizeof(wr));
+  
+    wr.wr_id = (uintptr_t)id;
+    wr.sg_list = NULL;
+    wr.num_sge = 0;
+  
+    TEST_NZ(ibv_post_recv(id->qp, &wr, &bad_wr));
+}
+
+static void on_pre_conn(struct rdma_cm_id *id) {
+  struct conn_context *ctx = (struct conn_context *)malloc(sizeof(struct conn_context));
+  ++num_clients;
+  id->context = ctx;
+
+  if (buffer == NULL) {
+      posix_memalign((void **)&ctx->buffer, sysconf(_SC_PAGESIZE), BUFFER_SIZE);
+      TEST_Z(ctx->buffer_mr = ibv_reg_mr(rc_get_pd(), ctx->buffer, BUFFER_SIZE, IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ));
+      buffer = ctx->buffer;
+      buffer_mr = ctx->buffer_mr;
+      printf("Registering to new memory...\n");
+  } else {
+      printf("Registering to the existing memory...\n");
+      ctx->buffer = buffer;
+      ctx->buffer_mr = buffer_mr;
+  }
+  printf("Assigned buffer....\n");
+  printf("Number of clients: %d\n", num_clients);
+
+  posix_memalign((void **)&ctx->msg, sysconf(_SC_PAGESIZE), sizeof(*ctx->msg));
+  TEST_Z(ctx->msg_mr = ibv_reg_mr(rc_get_pd(), ctx->msg, sizeof(*ctx->msg), 0));
+
+  post_receive(id);
+}
+
+static void on_connection(struct rdma_cm_id *id)
+{
+  struct conn_context *ctx = (struct conn_context *)id->context;
+
+  ctx->msg->id = MSG_READY;
+  ctx->msg->data.mr.addr = (uintptr_t)ctx->buffer_mr->addr;
+  ctx->msg->data.mr.rkey = ctx->buffer_mr->rkey;
+
+  send_message(id);
+}
+
+static void on_disconnect(struct rdma_cm_id *id)
+{
+  struct conn_context *ctx = (struct conn_context *)id->context;
+  --num_clients;
+  printf("Number of clients remaining: %d\n", num_clients);
+  if (num_clients == 0) {
+      ibv_dereg_mr(ctx->buffer_mr);
+      free(ctx->buffer);
+  }
+  ibv_dereg_mr(ctx->msg_mr);
+  free(ctx->msg);
+  free(ctx);
+}
+
+static void on_completion(struct ibv_wc *wc)
+{
+  struct rdma_cm_id *id = (struct rdma_cm_id *)(uintptr_t)wc->wr_id;
+  struct conn_context *ctx = (struct conn_context *)id->context;
+
+  if (wc->opcode == IBV_WC_RECV_RDMA_WITH_IMM) {
+    uint32_t size = ntohl(wc->imm_data);
+    if(size == 0) {
+        ctx->msg->id = MSG_DONE;
+        send_message(id);
+        return;
+    }
+    printf("Received data %s\n", ctx->buffer);
+    post_receive(id);
+    ctx->msg->id = MSG_READY;
+    send_message(id);
+  }
+}
+void *produce_data() {
+    printf("1");
+    while (buffer == NULL);
+    printf("2");
+    int size = 0;
+    sprintf(buffer,"%04d", size);
+    // Write data
+    size = 13;
+    sprintf(buffer,"%04d", size);
+    sprintf(buffer + strlen(buffer), "Hello/Danish");
+    printf("Look at the buffer: %s\n", buffer);
+    sleep(10);
+    size = 12;
+    sprintf(buffer + strlen(buffer), "%04d", size);
+    sprintf(buffer + strlen(buffer), "Hello/Arjun");
+    printf("Look at the buffer: %s\n", buffer);
+    pthread_exit(0);
+}
 int main(int argc, char **argv)
 {
-  struct sockaddr_in6 addr;
-  struct rdma_cm_event *event = NULL;
-  struct rdma_cm_id *listener = NULL;
-  struct rdma_event_channel *ec = NULL;
-  uint16_t port = 0;
+  pthread_t producer_thread;
+  rc_init(
+    on_pre_conn,
+    on_connection,
+    on_completion,
+    on_disconnect);
+  printf("3");
 
-  if (argc != 2)
-    usage(argv[0]);
+  pthread_create(&producer_thread, NULL, produce_data, NULL);
+  printf("waiting for connections. interrupt (^C) to exit.\n");
 
-  if (strcmp(argv[1], "write") == 0)
-    set_mode(M_WRITE);
-  else if (strcmp(argv[1], "read") == 0)
-    set_mode(M_READ);
-  else
-    usage(argv[0]);
-
-  memset(&addr, 0, sizeof(addr));
-  addr.sin6_family = AF_INET6;
-
-  TEST_Z(ec = rdma_create_event_channel());
-  TEST_NZ(rdma_create_id(ec, &listener, NULL, RDMA_PS_TCP));
-  TEST_NZ(rdma_bind_addr(listener, (struct sockaddr *)&addr));
-  TEST_NZ(rdma_listen(listener, 10)); /* backlog=10 is arbitrary */
-
-  port = ntohs(rdma_get_src_port(listener));
-
-  printf("listening on port %d.\n", port);
-
-  while (rdma_get_cm_event(ec, &event) == 0) {
-    struct rdma_cm_event event_copy;
-
-    memcpy(&event_copy, event, sizeof(*event));
-    rdma_ack_cm_event(event);
-
-    if (on_event(&event_copy))
-      break;
-  }
-
-  rdma_destroy_id(listener);
-  rdma_destroy_event_channel(ec);
+  rc_server_loop(DEFAULT_PORT);
 
   return 0;
 }
 
-int on_connect_request(struct rdma_cm_id *id)
-{
-  struct rdma_conn_param cm_params;
-
-  printf("received connection request.\n");
-  build_connection(id);
-  build_params(&cm_params);
-  sprintf(get_local_message_region(id->context), "message from passive/server side with pid %d", getpid());
-  TEST_NZ(rdma_accept(id, &cm_params));
-
-  return 0;
-}
-
-int on_connection(struct rdma_cm_id *id)
-{
-  on_connect(id->context);
-
-  return 0;
-}
-
-int on_disconnect(struct rdma_cm_id *id)
-{
-  printf("peer disconnected.\n");
-
-  destroy_connection(id->context);
-  return 0;
-}
-
-int on_event(struct rdma_cm_event *event)
-{
-  int r = 0;
-
-  if (event->event == RDMA_CM_EVENT_CONNECT_REQUEST)
-    r = on_connect_request(event->id);
-  else if (event->event == RDMA_CM_EVENT_ESTABLISHED)
-    r = on_connection(event->id);
-  else if (event->event == RDMA_CM_EVENT_DISCONNECTED)
-    r = on_disconnect(event->id);
-  else
-    die("on_event: unknown event.");
-
-  return r;
-}
-
-void usage(const char *argv0)
-{
-  fprintf(stderr, "usage: %s <mode>\n  mode = \"read\", \"write\"\n", argv0);
-  exit(1);
-}
 
