@@ -59,6 +59,7 @@ static void on_pre_conn(struct rdma_cm_id *id)
   posix_memalign((void **)&ctx->buffer, sysconf(_SC_PAGESIZE), BUFFER_SIZE);
   TEST_Z(ctx->buffer_mr = ibv_reg_mr(rc_get_pd(), ctx->buffer, BUFFER_SIZE, IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ));
   buffer = ctx->buffer;
+  printf("Assigned buffer....\n");
 
   posix_memalign((void **)&ctx->msg, sysconf(_SC_PAGESIZE), sizeof(*ctx->msg));
   TEST_Z(ctx->msg_mr = ibv_reg_mr(rc_get_pd(), ctx->msg, sizeof(*ctx->msg), 0));
@@ -110,11 +111,12 @@ void *produce_data() {
     while (buffer == NULL);
     printf("2");
     int size = 0;
-    sprintf(buffer,"%d", size);
+    sprintf(buffer,"%04d", size);
     // Write data
     size = 13;
-    sprintf(buffer,"%d", size);
-    sprintf(buffer + strlen(buffer), "Hello Danish");
+    sprintf(buffer,"%04d", size);
+    sprintf(buffer + strlen(buffer), "Hello/Danish");
+    printf("Look at the buffer: %s\n", buffer);
     pthread_exit(0);
 }
 int main(int argc, char **argv)
