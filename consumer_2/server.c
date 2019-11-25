@@ -126,6 +126,11 @@ void *produce_data() {
     sprintf(buffer,"%04d", size);
     sprintf(buffer + strlen(buffer), "Hello/Danish");
     printf("Look at the buffer: %s\n", buffer);
+    sleep(10);
+    size = 12;
+    sprintf(buffer + strlen(buffer), "%04d", size);
+    sprintf(buffer + strlen(buffer), "Hello/Arjun");
+    printf("Look at the buffer: %s\n", buffer);
     pthread_exit(0);
 }
 int main(int argc, char **argv)
