@@ -13,7 +13,7 @@ struct conn_context
   struct ibv_mr *msg_mr;
 };
 
-
+static int num_clients = 0;
 static char* buffer = NULL;
 static struct ibv_mr *buffer_mr;
 static void send_message(struct rdma_cm_id *id)
@@ -54,7 +54,7 @@ static void post_receive(struct rdma_cm_id *id)
 static void on_pre_conn(struct rdma_cm_id *id)
 {
   struct conn_context *ctx = (struct conn_context *)malloc(sizeof(struct conn_context));
-
+  ++num_clients;
   id->context = ctx;
 
   if (buffer == NULL) {
@@ -69,6 +69,7 @@ static void on_pre_conn(struct rdma_cm_id *id)
       ctx->buffer_mr = buffer_mr;
   }
   printf("Assigned buffer....\n");
+  printf("Number of clients: %d\n", num_clients);
 
   posix_memalign((void **)&ctx->msg, sysconf(_SC_PAGESIZE), sizeof(*ctx->msg));
   TEST_Z(ctx->msg_mr = ibv_reg_mr(rc_get_pd(), ctx->msg, sizeof(*ctx->msg), 0));
@@ -90,9 +91,13 @@ static void on_connection(struct rdma_cm_id *id)
 static void on_disconnect(struct rdma_cm_id *id)
 {
   struct conn_context *ctx = (struct conn_context *)id->context;
-  ibv_dereg_mr(ctx->buffer_mr);
+  --num_clients;
+  printf("Number of clients remaining: %d\n", num_clients);
+  if (num_clients == 0) {
+      ibv_dereg_mr(ctx->buffer_mr);
+      free(ctx->buffer);
+  }
   ibv_dereg_mr(ctx->msg_mr);
-  free(ctx->buffer);
   free(ctx->msg);
   free(ctx);
 }

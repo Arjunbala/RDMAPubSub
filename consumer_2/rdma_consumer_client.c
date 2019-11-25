@@ -57,7 +57,6 @@ struct ProducerMessage* createNode(char *key, char *value)
     return node;
 }
 
-
 static void post_receive(struct rdma_cm_id *id)
 {
     struct client_context *ctx = (struct client_context *) id->context;
@@ -98,6 +97,26 @@ struct ProducerMessage* consumeRecord() {
     return producer_record;
 }
 
+static void create_and_post_work_request(struct rdma_cm_id *id) {
+    struct client_context *ctx = (struct client_context *)id->context;
+    struct ibv_send_wr wr, *bad_wr = NULL;
+    struct ibv_sge sge;
+    memset(&wr, 0, sizeof(wr));
+    wr.wr_id = (uintptr_t)id;
+    wr.opcode = IBV_WR_RDMA_READ;
+    wr.sg_list = &sge;
+    wr.num_sge = 1;
+    wr.send_flags = IBV_SEND_SIGNALED;
+    wr.wr.rdma.remote_addr = (uintptr_t)ctx->peer_addr;
+    wr.wr.rdma.rkey = ctx->peer_rkey;
+    
+    sge.addr = (uintptr_t)ctx->buffer;
+    sge.length = ctx->size;
+    sge.lkey = ctx->buffer_mr->lkey;
+    
+    TEST_NZ(ibv_post_send(id->qp, &wr, &bad_wr));
+}
+
 static void issue_one_sided_read(struct rdma_cm_id *id) {
     struct client_context *ctx = (struct client_context *)id->context;
     printf("Started issuing...\n");
@@ -114,43 +133,45 @@ static void issue_one_sided_read(struct rdma_cm_id *id) {
             ctx->peer_addr += VAL_LENGTH; // TODO: Wrap around
             printf("Forwarding peer address by %zu\n", VAL_LENGTH);
 	    // Issue one sided operation to read the data
-            struct ibv_send_wr wr, *bad_wr = NULL;
-    	    struct ibv_sge sge;
-    	    memset(&wr, 0, sizeof(wr));
-    	    wr.wr_id = (uintptr_t)id;
-    	    wr.opcode = IBV_WR_RDMA_READ;
-    	    wr.sg_list = &sge;
-    	    wr.num_sge = 1;
-    	    wr.send_flags = IBV_SEND_SIGNALED;
-    	    wr.wr.rdma.remote_addr = (uintptr_t)ctx->peer_addr;
-    	    wr.wr.rdma.rkey = ctx->peer_rkey;
-	    printf("Did wr things...\n");
-            sge.addr = (uintptr_t)ctx->buffer;
-    	    sge.length = ctx->size;
-    	    sge.lkey = ctx->buffer_mr->lkey;
+            create_and_post_work_request(id);
+            //struct ibv_send_wr wr, *bad_wr = NULL;
+    	    //struct ibv_sge sge;
+    	    //memset(&wr, 0, sizeof(wr));
+    	    //wr.wr_id = (uintptr_t)id;
+    	    //wr.opcode = IBV_WR_RDMA_READ;
+    	    //wr.sg_list = &sge;
+    	    //wr.num_sge = 1;
+    	    //wr.send_flags = IBV_SEND_SIGNALED;
+    	    //wr.wr.rdma.remote_addr = (uintptr_t)ctx->peer_addr;
+    	    //wr.wr.rdma.rkey = ctx->peer_rkey;
+	    //printf("Did wr things...\n");
+            //sge.addr = (uintptr_t)ctx->buffer;
+    	    //sge.length = ctx->size;
+    	    //sge.lkey = ctx->buffer_mr->lkey;
 
-    	    TEST_NZ(ibv_post_send(id->qp, &wr, &bad_wr));	    
-	    printf("Posted send at 1...\n");
+    	    //TEST_NZ(ibv_post_send(id->qp, &wr, &bad_wr));	    
+	    //printf("Posted send at 1...\n");
         } else {
+            create_and_post_work_request(id);
             // Issue one sided operation, polling logic
-            struct ibv_send_wr wr, *bad_wr = NULL;
-    	    struct ibv_sge sge;
-    	    memset(&wr, 0, sizeof(wr));
-    	    wr.wr_id = (uintptr_t)id;
-    	    wr.opcode = IBV_WR_RDMA_READ;
-    	    wr.sg_list = &sge;
-    	    wr.num_sge = 1;
-    	    wr.send_flags = IBV_SEND_SIGNALED;
-    	    wr.wr.rdma.remote_addr = (uintptr_t)ctx->peer_addr;
-    	    wr.wr.rdma.rkey = ctx->peer_rkey;
-	    printf("Did wr things at 2...\n");
+            //struct ibv_send_wr wr, *bad_wr = NULL;
+    	    //struct ibv_sge sge;
+    	    //memset(&wr, 0, sizeof(wr));
+    	    //wr.wr_id = (uintptr_t)id;
+    	    //wr.opcode = IBV_WR_RDMA_READ;
+    	    //wr.sg_list = &sge;
+    	    //wr.num_sge = 1;
+    	    //wr.send_flags = IBV_SEND_SIGNALED;
+    	    //wr.wr.rdma.remote_addr = (uintptr_t)ctx->peer_addr;
+    	    //wr.wr.rdma.rkey = ctx->peer_rkey;
+	    //printf("Did wr things at 2...\n");
 
-            sge.addr = (uintptr_t)ctx->buffer;
-    	    sge.length = ctx->size; // Check type
-    	    sge.lkey = ctx->buffer_mr->lkey;
+            //sge.addr = (uintptr_t)ctx->buffer;
+    	    //sge.length = ctx->size; // Check type
+    	    //sge.lkey = ctx->buffer_mr->lkey;
 
-    	    TEST_NZ(ibv_post_send(id->qp, &wr, &bad_wr));
-	    printf("Posted send at 2...\n");
+    	    //TEST_NZ(ibv_post_send(id->qp, &wr, &bad_wr));
+	    //printf("Posted send at 2...\n");
 	}
     } else {
 	printf("Server wrote into the buffer: %s\n", ctx->buffer);
@@ -172,22 +193,23 @@ static void issue_one_sided_read(struct rdma_cm_id *id) {
 	ctx->peer_addr += ctx->size - 1;
 	ctx->size = VAL_LENGTH;
 	// Issue one sided operation to read the length
-	struct ibv_send_wr wr, *bad_wr = NULL;
-    	struct ibv_sge sge;
-    	memset(&wr, 0, sizeof(wr));
-    	wr.wr_id = (uintptr_t)id;
-    	wr.opcode = IBV_WR_RDMA_READ;
-    	wr.sg_list = &sge;
-    	wr.num_sge = 1;
-    	wr.send_flags = IBV_SEND_SIGNALED;
-    	wr.wr.rdma.remote_addr = (uintptr_t)ctx->peer_addr;
-    	wr.wr.rdma.rkey = ctx->peer_rkey;
+        create_and_post_work_request(id);
+	//struct ibv_send_wr wr, *bad_wr = NULL;
+    	//struct ibv_sge sge;
+    	//memset(&wr, 0, sizeof(wr));
+    	//wr.wr_id = (uintptr_t)id;
+    	//wr.opcode = IBV_WR_RDMA_READ;
+    	//wr.sg_list = &sge;
+    	//wr.num_sge = 1;
+    	//wr.send_flags = IBV_SEND_SIGNALED;
+    	//wr.wr.rdma.remote_addr = (uintptr_t)ctx->peer_addr;
+    	//wr.wr.rdma.rkey = ctx->peer_rkey;
 
-        sge.addr = (uintptr_t)ctx->buffer;
-    	sge.length = ctx->size;
-    	sge.lkey = ctx->buffer_mr->lkey;
+        //sge.addr = (uintptr_t)ctx->buffer;
+    	//sge.length = ctx->size;
+    	//sge.lkey = ctx->buffer_mr->lkey;
 
-    	TEST_NZ(ibv_post_send(id->qp, &wr, &bad_wr));	
+    	//TEST_NZ(ibv_post_send(id->qp, &wr, &bad_wr));	
     } 
     
 }
