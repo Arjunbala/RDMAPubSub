@@ -65,7 +65,7 @@ static void on_pre_conn(struct rdma_cm_id *id)
 
   ctx->role = getRole();
   printf("ROLE:%s\n", ctx->role);
-  if (strcmp(ctx->role, PRODUCER_ROLE)) {
+  if (strcmp(ctx->role, PRODUCER_ROLE) == 0) {
     posix_memalign((void **)&ctx->buffer, sysconf(_SC_PAGESIZE), BUFFER_SIZE);
     TEST_Z(ctx->buffer_mr = ibv_reg_mr(rc_get_pd(), ctx->buffer, BUFFER_SIZE, IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_WRITE));
 
@@ -107,7 +107,7 @@ static void on_connection(struct rdma_cm_id *id)
 static void on_disconnect(struct rdma_cm_id *id)
 {
   struct conn_context *ctx = (struct conn_context *)id->context;
-  if (strcmp(ctx->role, PRODUCER_ROLE)) {
+  if (strcmp(ctx->role, PRODUCER_ROLE) == 0) {
     ibv_dereg_mr(ctx->buffer_mr);
     ibv_dereg_mr(ctx->msg_mr);
     free(ctx->buffer);
