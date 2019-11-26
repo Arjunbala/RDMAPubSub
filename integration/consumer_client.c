@@ -6,7 +6,7 @@
 int main(int argc, char **argv)
 {
    char* thread_name = "Consumer";
-   init(argv[0]);
+   init(argv[1]);
    struct ProducerMessage* m = consumeRecord();
    printf("%s got key: %s, value:%s\n", thread_name, m->key, m->value);
    struct ProducerMessage* m1 = consumeRecord();
