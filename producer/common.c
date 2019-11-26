@@ -176,6 +176,7 @@ void rc_client_loop(const char *host, const char *port, void *context, const cha
   struct rdma_event_channel *ec = NULL;
   struct rdma_conn_param cm_params;
 
+  client_role = (char*) malloc(100 * sizeof(char));
   strcpy(client_role, role);
 
   TEST_NZ(getaddrinfo(host, port, NULL, &addr));
