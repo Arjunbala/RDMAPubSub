@@ -57,7 +57,6 @@ void build_context(struct ibv_context *verbs)
 void build_params(struct rdma_conn_param *params)
 {
   memset(params, 0, sizeof(*params));
-  printf("In build params\n");
   params->initiator_depth = params->responder_resources = 1;
   params->rnr_retry_count = 7; /* infinite retry */
 }
@@ -88,6 +87,11 @@ void event_loop(struct rdma_event_channel *ec, int exit_on_disconnect)
 
     memcpy(&event_copy, event, sizeof(*event));
     rdma_ack_cm_event(event);
+    if (event_copy.event == RDMA_CM_EVENT_CONNECT_REQUEST) {
+        char *role = (char*)event_copy.param.conn.private_data;
+        client_role = (char*) malloc(100*sizeof(char));
+        strcpy(client_role, role);
+    }
     if (event_copy.event == RDMA_CM_EVENT_ADDR_RESOLVED) {
       build_connection(event_copy.id);
       
@@ -103,7 +107,6 @@ void event_loop(struct rdma_event_channel *ec, int exit_on_disconnect)
 
     } else if (event_copy.event == RDMA_CM_EVENT_CONNECT_REQUEST) {
       build_connection(event_copy.id);
-
       if (s_on_pre_conn_cb)
         s_on_pre_conn_cb(event_copy.id);
 
