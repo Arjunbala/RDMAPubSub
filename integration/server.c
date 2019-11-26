@@ -141,9 +141,9 @@ static void on_completion(struct ibv_wc *wc)
       }
       printf("Received data %s\n", ctx->buffer);
       int data_size = strlen(ctx->buffer);
-      sprintf(consumer_buffer, "%04d", data_size);
-      sprintf(consumer_buffer + data_size, "%s", ctx->buffer);
-      consumer_buffer += strlen(consumer_buffer);
+      sprintf(consumer_buffer + strlen(consumer_buffer), "%04d", data_size);
+      sprintf(consumer_buffer + strlen(consumer_buffer), "%s", ctx->buffer);
+      printf("Consumer buffer: %s\n", consumer_buffer);
       post_receive(id);
       ctx->msg->id = MSG_READY;
       send_message(id);
