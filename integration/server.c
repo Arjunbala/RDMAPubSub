@@ -73,23 +73,23 @@ static void on_pre_conn(struct rdma_cm_id *id)
     TEST_Z(ctx->msg_mr = ibv_reg_mr(rc_get_pd(), ctx->msg, sizeof(*ctx->msg), 0));
   } else {
     ++num_clients;
-    if (consumer_buffer == NULL) {
-          posix_memalign((void **)&ctx->buffer, sysconf(_SC_PAGESIZE), BUFFER_SIZE);
-          TEST_Z(ctx->buffer_mr = ibv_reg_mr(rc_get_pd(), ctx->buffer, BUFFER_SIZE, IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ));
-          consumer_buffer = ctx->buffer;
-          consumer_buffer_mr = ctx->buffer_mr;
-          printf("Registering to new memory...\n");
-      } else {
-          printf("Registering to the existing memory...\n");
-          ctx->buffer = consumer_buffer;
-          ctx->buffer_mr = consumer_buffer_mr;
-      }
-      printf("Assigned buffer....\n");
-      printf("Number of clients: %d\n", num_clients);
-    
-      posix_memalign((void **)&ctx->msg, sysconf(_SC_PAGESIZE), sizeof(*ctx->msg));
-      TEST_Z(ctx->msg_mr = ibv_reg_mr(rc_get_pd(), ctx->msg, sizeof(*ctx->msg), 0));
+    posix_memalign((void **)&ctx->msg, sysconf(_SC_PAGESIZE), sizeof(*ctx->msg));
+    TEST_Z(ctx->msg_mr = ibv_reg_mr(rc_get_pd(), ctx->msg, sizeof(*ctx->msg), 0));
   }
+  if (consumer_buffer == NULL) {
+      posix_memalign((void **)&ctx->buffer, sysconf(_SC_PAGESIZE), BUFFER_SIZE);
+      TEST_Z(ctx->buffer_mr = ibv_reg_mr(rc_get_pd(), ctx->buffer, BUFFER_SIZE, IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ));
+      consumer_buffer = ctx->buffer;
+      consumer_buffer_mr = ctx->buffer_mr;
+      printf("Registering to new memory...\n");
+  } else {
+      printf("Registering to the existing memory...\n");
+      ctx->buffer = consumer_buffer;
+      ctx->buffer_mr = consumer_buffer_mr;
+  }
+  printf("Assigned buffer....\n");
+  printf("Number of clients: %d\n", num_clients);
+
   post_receive(id);
 }
 
