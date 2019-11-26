@@ -162,7 +162,7 @@ static void issue_one_sided_read(struct rdma_cm_id *id) {
 	pthread_mutex_unlock(&polling_mutex);
 	// Transition state to READ_POLLING, change peer_addr and size
 	ctx->read_status = READ_POLLING;
-	ctx->peer_addr += ctx->size - 1;
+	ctx->peer_addr += ctx->size;
 	ctx->size = VAL_LENGTH;
 	// Issue one sided operation to read the length
         create_and_post_work_request(id);
