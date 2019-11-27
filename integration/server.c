@@ -121,10 +121,6 @@ static void on_disconnect(struct rdma_cm_id *id)
   } else {
     --num_clients;
     printf("Number of clients remaining: %d\n", num_clients);
-    if (num_clients == 0) {
-        ibv_dereg_mr(ctx->buffer_mr);
-        free(ctx->buffer);
-    }
     ibv_dereg_mr(ctx->msg_mr);
     free(ctx->msg);
     free(ctx);
