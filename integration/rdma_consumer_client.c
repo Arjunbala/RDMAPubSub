@@ -126,19 +126,15 @@ static void create_and_post_work_request(struct rdma_cm_id *id) {
 
 static void issue_one_sided_read(struct rdma_cm_id *id) {
     struct client_context *ctx = (struct client_context *)id->context;
-    printf("Started issuing...\n");
     // Check if in polling state
     if (ctx->read_status == READ_POLLING) {
         // Check if buffer has valid length
-        printf("ATOI:%d\n", atoi(ctx->buffer));
         if (atoi(ctx->buffer) > 0) {
             // Transition to READ_READY, set the size
 	    ctx->read_status = READ_READY;
 	    ctx->size = atoi(ctx->buffer);
-            printf("The size to be read has been set as %d\n", ctx->size);
 	    // Update remote addr to read from
             ctx->peer_addr += VAL_LENGTH; // TODO: Wrap around
-            printf("Forwarding peer address by %zu\n", VAL_LENGTH);
 	    // Issue one sided operation to read the data
             create_and_post_work_request(id);
         } else {
