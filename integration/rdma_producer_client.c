@@ -24,7 +24,7 @@ struct client_context
     int index;
 };
 
-#define PRODUCER_RECORD_BACKLOG 1000
+#define PRODUCER_RECORD_BACKLOG 100000
 
 struct ProducerMessage *producer_records[PRODUCER_RECORD_BACKLOG] = {NULL};
 int head = -1;
@@ -57,7 +57,7 @@ struct ProducerMessage* createNode(char *key, char *value)
 void insertAtEnd(struct ProducerMessage *node)
 {
     pthread_mutex_lock(&producer_mutex);
-    printf("Adding producer record\n");
+    //printf("Adding producer record\n");
     head = (head + 1) % PRODUCER_RECORD_BACKLOG;
     // assert that we are not over-flowing
     assert(producer_records[head] == NULL);
@@ -132,7 +132,7 @@ static void send_producer_record(struct rdma_cm_id *id)
             rdma_send(id, 0);
             return;
         }
-        printf("Got a producer record now\n");
+        //printf("Got a producer record now\n");
     }
     // Serialize the msg as key/value
     // TODO: Use a better serialization logic
@@ -144,7 +144,7 @@ static void send_producer_record(struct rdma_cm_id *id)
     strcpy(ctx->buffer, str);
     producer_records[ctx->index] = NULL;
     pthread_mutex_unlock(&producer_mutex);
-    printf("sending %s via RDMA\n", ctx->buffer);
+    //printf("sending %s via RDMA\n", ctx->buffer);
     rdma_send(id, strlen(str)+1);
     
     // Get ready to send next message
@@ -173,7 +173,7 @@ static void on_completion(struct ibv_wc *wc)
         if (ctx->msg->id == MSG_READY) {
             ctx->peer_addr = ctx->msg->data.mr.addr;
             ctx->peer_rkey = ctx->msg->data.mr.rkey;
-            printf("received ready, sending next producer record\n");
+            //printf("received ready, sending next producer record\n");
             send_producer_record(id);
             post_receive(id);
         } else if (ctx->msg->id == MSG_DONE) {
