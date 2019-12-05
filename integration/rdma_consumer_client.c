@@ -7,7 +7,7 @@
 #include "messages.h"
 #include "rdma_consumer.h"
 
-#define PRODUCER_RECORD_BACKLOG 1000
+#define PRODUCER_RECORD_BACKLOG 100000
 #define VAL_LENGTH sizeof(int)
 
 struct client_context {
@@ -45,8 +45,8 @@ pthread_mutex_t consumer_mutex = PTHREAD_MUTEX_INITIALIZER;
  * Note: Creates deep copies of both key and value
  */
 struct ProducerMessage* createNode(char *key, char *value) {
-    char *k = malloc(sizeof(key) + 1);
-    char *v = malloc(sizeof(value) + 1);
+    char *k = malloc(sizeof(char)*strlen(key));
+    char *v = malloc(sizeof(char)*strlen(value));
     strcpy(k, key);
     strcpy(v, value);
     struct ProducerMessage *node = malloc(sizeof(struct ProducerMessage));
@@ -127,12 +127,16 @@ static void create_and_post_work_request(struct rdma_cm_id *id) {
 static void issue_one_sided_read(struct rdma_cm_id *id) {
     struct client_context *ctx = (struct client_context *)id->context;
     // Check if in polling state
+    char *read_buffer = (char *) malloc((ctx->size+1)*sizeof(char));
+    strncpy(read_buffer, ctx->buffer, ctx->size);
+    read_buffer[ctx->size] = '\0';
     if (ctx->read_status == READ_POLLING) {
         // Check if buffer has valid length
-        if (atoi(ctx->buffer) > 0) {
+        //printf("Polling: %s\n", read_buffer);
+        if (atoi(read_buffer) > 0) {
             // Transition to READ_READY, set the size
 	    ctx->read_status = READ_READY;
-	    ctx->size = atoi(ctx->buffer);
+	    ctx->size = atoi(read_buffer);
 	    // Update remote addr to read from
             ctx->peer_addr += VAL_LENGTH; // TODO: Wrap around
 	    // Issue one sided operation to read the data
@@ -142,16 +146,21 @@ static void issue_one_sided_read(struct rdma_cm_id *id) {
             create_and_post_work_request(id);
 	}
     } else {
-	printf("Server wrote into the buffer: %s\n", ctx->buffer);
+        //printf("Data: %s\n", read_buffer);
+	//printf("Server wrote into the buffer: %s\n", ctx->buffer);
 	// Deserialize the buffer into producer record
         char* separator;
-        separator = strstr(ctx->buffer, "/");
-	printf("Separator is %s\n", separator);
-        char* key = (char*)malloc(sizeof(char) *  (separator - ctx->buffer + 1));
-        printf("Key allocated of length: %zu\n", (separator - ctx->buffer + 1));
-        strncpy(key, ctx->buffer, (separator - ctx->buffer));
-        printf("Key: %s\n", key);
-        producer_record = createNode(key, separator + 1);        
+        separator = strchr(read_buffer, '/');
+	//printf("Separator is %s\n", separator);
+        char* key = (char*)malloc(sizeof(char) *  (separator - read_buffer + 1));
+        //printf("Key allocated of length: %zu\n", (separator - ctx->buffer + 1));
+        strncpy(key, ctx->buffer, (separator - read_buffer));
+        int key_length = strlen(key);
+        int val_length = (int)(strlen(read_buffer)-key_length-1);
+        char* value = (char*)malloc(sizeof(char) * val_length);
+        strncpy(value, ctx->buffer+key_length+1, val_length);
+        producer_record = createNode(key, value);      
+        //producer_record = NULL;  
 	pthread_cond_signal(&polling_cond_variable);
         pthread_mutex_lock(&polling_mutex);
 	pthread_cond_wait(&consumer_cond_variable, &polling_mutex);
