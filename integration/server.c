@@ -89,8 +89,8 @@ static void on_pre_conn(struct rdma_cm_id *id)
           ctx->buffer = consumer_buffer;
           ctx->buffer_mr = consumer_buffer_mr;
       }
-      printf("Assigned buffer....\n");
-      printf("Number of clients: %d\n", num_clients);
+      //printf("Assigned buffer....\n");
+      //printf("Number of clients: %d\n", num_clients);
     
       posix_memalign((void **)&ctx->msg, sysconf(_SC_PAGESIZE), sizeof(*ctx->msg));
       TEST_Z(ctx->msg_mr = ibv_reg_mr(rc_get_pd(), ctx->msg, sizeof(*ctx->msg), 0));
@@ -140,11 +140,11 @@ static void on_completion(struct ibv_wc *wc)
           send_message(id);
           return;
       }
-      printf("Received data %s\n", ctx->buffer);
+      //printf("Received data %s\n", ctx->buffer);
       int data_size = strlen(ctx->buffer);
       sprintf(consumer_buffer + strlen(consumer_buffer), "%04d", data_size);
       sprintf(consumer_buffer + strlen(consumer_buffer), "%s", ctx->buffer);
-      printf("Consumer buffer: %s\n", consumer_buffer);
+      //printf("Consumer buffer: %s\n", consumer_buffer);
       post_receive(id);
       ctx->msg->id = MSG_READY;
       send_message(id);
@@ -157,7 +157,7 @@ static void on_completion(struct ibv_wc *wc)
           send_message(id);
           return;
       }
-      printf("Received data %s\n", ctx->buffer);
+      //printf("Received data %s\n", ctx->buffer);
       post_receive(id);
       ctx->msg->id = MSG_READY;
       send_message(id);
